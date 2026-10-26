@@ -5,3 +5,6 @@ preview.html
 Thumbs.db
 *.bak
 materials/
+
+# 真实的项目清单不进仓库（复制 projects.example.yaml）
+projects.yaml

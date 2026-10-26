@@ -1,0 +1,42 @@
+# 项目进度看板 —— 示例数据
+#
+# 复制成 projects.yaml 再改：
+#   copy projects.example.yaml projects.yaml
+#
+# 人只写三样：intent（这个项目现在为了什么）、next（下一个具体动作）、status（阶段）。
+# 其余全部由机器算：最后动静、红黄绿、未完成卡数。不要手写时间戳。
+#
+# 状态词表按 kind 分两套，故意不统一：
+#   code     → building 开发中 / blocked 卡住（在等外部东西）/ paused 搁置 / shelved 认账不做 / shipped 已交付
+#   material → collecting 收集中 / editing 制作中 / paused 搁置 / shelved 认账不做 / exported 已出片
+
+settings:
+  staleDays: 5        # 超过这么多天没动静 → 🟡
+  zombieDays: 14      # 超过这么多天 → 🔴
+  wipSoftLimit: 3     # 「在做」超过这个数，顶部变黄提醒（只是提醒，不禁止）
+
+projects:
+  - id: dsh-project-board
+    name: dsh-project-board
+    path: D:\work\portfolio
+    kind: code
+    status: building
+    intent: 把项目进度看板做成 DSH 原生侧边栏面板
+    next: 发到 GitHub，README 与截图补齐
+
+  - id: my-notes
+    name: my-notes
+    path: D:\work\my-notes
+    kind: code
+    status: paused
+    intent: 离线把零散笔记折叠成一周摘要
+    next: 先跑通「按标题合并」这一条规则
+
+  - id: demo-clip
+    name: demo-clip
+    path: D:\work\my-clip
+    kind: material
+    status: editing
+    stage: 粗剪
+    intent: 用一版动效模板把文案做成科技风成片
+    next: 按旁白稿录音，混进第二版
