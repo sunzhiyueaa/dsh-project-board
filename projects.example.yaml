@@ -18,7 +18,7 @@ settings:
 projects:
   - id: dsh-project-board
     name: dsh-project-board
-    path: D:\work\portfolio
+    path: D:\work\my-project
     kind: code
     status: building
     intent: 把项目进度看板做成 DSH 原生侧边栏面板

@@ -29,10 +29,10 @@ get edited while you talk to the agent.
 Requires a working `dsh web` with the `web` profile.
 
 ```powershell
-git clone https://github.com/sunzhiyueaa/dsh-project-board.git D:\work\portfolio
-cd D:\work\portfolio
+git clone https://github.com/sunzhiyueaa/dsh-project-board.git D:\dsh-plugins\dsh-project-board
+cd D:\dsh-plugins\dsh-project-board
 copy projects.example.yaml projects.yaml     # then put your own projects in
-dsh plugin --profile web add link:D:\work\portfolio
+dsh plugin --profile web add link:D:\dsh-plugins\dsh-project-board
 ```
 
 **Restart `dsh web` afterwards.** The client plugin manifest is scanned once per process;
@@ -81,7 +81,7 @@ settings:
 projects:
   - id: dsh-project-board
     name: dsh-project-board
-    path: D:\work\portfolio
+    path: D:\dsh-plugins\dsh-project-board
     kind: code            # code | material
     status: building
     intent: one sentence, why this project exists right now
@@ -137,7 +137,6 @@ lib/host/page.js      the v1 standalone page (/project-board still works)
 lib/client.js         the panel itself — hand-written bundle, no build step
 cordis.patch.yml      the one row that mounts it into the profile
 docs/                 screenshots
-进度交接.md            design + pitfalls log (Chinese, long)
 scripts/check.mjs     offline self-check: valid yaml + routes respond
 ```
 

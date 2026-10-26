@@ -25,10 +25,10 @@ DSH Web 侧边栏里的**原生**项目看板：五列按状态分，**天数只
 前置：`dsh web` 已经能跑，用 `web` profile。
 
 ```powershell
-git clone https://github.com/sunzhiyueaa/dsh-project-board.git D:\work\portfolio
-cd D:\work\portfolio
+git clone https://github.com/sunzhiyueaa/dsh-project-board.git D:\dsh-plugins\dsh-project-board
+cd D:\dsh-plugins\dsh-project-board
 copy projects.example.yaml projects.yaml     # 然后填你自己的项目
-dsh plugin --profile web add link:D:\work\portfolio
+dsh plugin --profile web add link:D:\dsh-plugins\dsh-project-board
 ```
 
 **装完要重启 `dsh web`**：客户端插件清单每个进程只扫一次，不重启侧边栏不会出现这一行。
@@ -77,7 +77,7 @@ settings:
 projects:
   - id: dsh-project-board
     name: dsh-project-board
-    path: D:\work\portfolio
+    path: D:\dsh-plugins\dsh-project-board
     kind: code            # code | material
     status: building
     intent: 一句话说清这个项目现在为了什么
@@ -128,7 +128,6 @@ lib/host/page.js      v1 的独立网页（/project-board 仍可直接打开）
 lib/client.js         面板本体，手写 bundle，无构建链
 cordis.patch.yml      把插件插进 profile 的一行
 docs/                 截图
-进度交接.md            设计与踩坑记录（中文，比较长）
 scripts/check.mjs     离线自检：yaml 合法 + 路由能响应
 ```
 

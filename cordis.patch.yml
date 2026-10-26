@@ -1,6 +1,6 @@
 # dsh-project-board bundle patch：把面板插件这一行插进 web profile 的名册。
 # 通过 profile bundle 层生效（package.json 的 dsh.bundle.patch 字段），
-# 安装命令：dsh plugin --profile web add link:D:\work\portfolio
+# 安装命令：dsh plugin --profile web add link:D:\dsh-plugins\dsh-project-board
 #
 # 这一行是纯 Host 插件：node 半（exports "."）在 Host 进程里跑，
 # 注册 /project-board 页面和 /project-board/data.json 两条路由。

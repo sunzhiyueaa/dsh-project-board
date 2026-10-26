@@ -8,3 +8,9 @@ materials/
 
 # 真实的项目清单不进仓库（复制 projects.example.yaml）
 projects.yaml
+
+# 本地过程稿：留在磁盘上，但不进仓库
+design-demos/
+进度交接.md
+
+scripts/timing.mjs
