@@ -2,7 +2,7 @@
 //   node scripts/check.mjs
 // 任何一项不合格就 exit 1。
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parse as parseYaml } from 'yaml'
@@ -144,7 +144,78 @@ if (html.body.includes('undefined')) fail('/project-board 页面里出现了 und
 
 if (typeof dispose === 'function') dispose()
 
-// ── 4. 收尾 ──────────────────────────────────────────────────────────────
+// ── 4. yaml 改写层：CRLF / LF 各跑一遍，改完必须还是合法 yaml ────────────────
+// 这条是血的教训：git 在 Windows 上检出成 CRLF，而 split('\n') 让每行末尾剩一个 \r，
+// 结果 status 那行匹配不上，代码改走「插入一行」的分支，写出来的 yaml 直接坏掉。
+const edit = await import(pathToFileURL(join(ROOT, 'lib', 'host', 'edit.js')).href)
+const fixture = (eol) => [
+  'settings:',
+  '  staleDays: 5',
+  '',
+  'projects:',
+  '  - id: alpha',
+  '    name: alpha',
+  '    path: D:\\work\\alpha',
+  '    kind: code',
+  '    status: building',
+  '    intent: 测试用',
+  '    next: 改状态',
+  '',
+  '  - id: beta',
+  '    name: beta',
+  '    kind: code',
+  '    intent: 没有 status 行的那种',
+  '    next: 插一行',
+  '',
+].join(eol)
+
+for (const eol of ['\n', '\r\n']) {
+  const label = eol === '\n' ? 'LF' : 'CRLF'
+  const tmp = join(ROOT, 'node_modules', `.pb-fixture-${label}.yaml`)
+  const write = (text) => writeFileSync(tmp, text, 'utf8')
+
+  // 4.1 有 status 行：只换那一行，行尾符不变，其它字节不动
+  write(fixture(eol))
+  const before = readFileSync(tmp, 'utf8')
+  edit.setStatus(tmp, 'alpha', 'paused')
+  const after = readFileSync(tmp, 'utf8')
+  const doc1 = parseYaml(after)
+  if (doc1.projects.find((p) => p.id === 'alpha')?.status !== 'paused') fail(`${label}: setStatus 没写进去`)
+  if (eol === '\r\n' && after.replace(/\r\n/g, '').includes('\n')) fail('CRLF: 改写把行尾符搞混了')
+  if (before.split(eol).length !== after.split(eol).length) fail(`${label}: setStatus 多写/少写了行`)
+
+  // 4.2 没有 status 行：插进去之后必须还是合法 yaml，缩进得和别的键对齐
+  edit.setStatus(tmp, 'beta', 'blocked')
+  const after2 = readFileSync(tmp, 'utf8')
+  let doc2 = null
+  try {
+    doc2 = parseYaml(after2)
+  } catch (error) {
+    fail(`${label}: setStatus 插 status 之后 yaml 坏了 -> ${error.message}`)
+  }
+  if (doc2?.projects.find((p) => p.id === 'beta')?.status !== 'blocked') fail(`${label}: 插入的 status 没生效`)
+
+  // 4.3 追加项目：仍然合法，id 出现，行尾符跟着原文件
+  edit.appendProject(tmp, {
+    id: 'gamma', name: 'gamma', path: 'D:\\work\\gamma',
+    kind: 'material', intent: '追加的', next: '测一下',
+  })
+  const after3 = readFileSync(tmp, 'utf8')
+  let doc3 = null
+  try {
+    doc3 = parseYaml(after3)
+  } catch (error) {
+    fail(`${label}: appendProject 之后 yaml 坏了 -> ${error.message}`)
+  }
+  const gamma = doc3?.projects.find((p) => p.id === 'gamma')
+  if (!gamma) fail(`${label}: appendProject 没追加成功`)
+  if (gamma?.kind !== 'material' || gamma?.status !== 'collecting') fail(`${label}: 追加时 kind/status 默认值不对`)
+  if (eol === '\r\n' && after3.replace(/\r\n/g, '').includes('\n')) fail('CRLF: appendProject 把行尾符搞混了')
+
+  if (existsSync(tmp)) rmSync(tmp)
+}
+
+// ── 5. 收尾 ──────────────────────────────────────────────────────────────
 if (problems.length > 0) {
   console.error('\n✗ 自检失败：')
   for (const message of problems) console.error('  - ' + message)
