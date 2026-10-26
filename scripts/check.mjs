@@ -1,4 +1,4 @@
-// 离线自检：不启动 DSH，也能验证插件契约、YAML 结构、路由响应。
+// 离线自检：不启动 DSH，也能验证插件契约、YAML 结构、证据折叠、路由响应。
 //   node scripts/check.mjs
 // 任何一项不合格就 exit 1。
 
@@ -12,11 +12,13 @@ const STATUS = {
   code: ['building', 'blocked', 'paused', 'shelved', 'shipped'],
   material: ['collecting', 'editing', 'paused', 'shelved', 'exported'],
 }
+const DONE = new Set(['shipped', 'exported'])
+const WIP = new Set(['building', 'editing', 'collecting'])
 
 const problems = []
 const fail = (message) => problems.push(message)
 
-// 1. projects.yaml 结构
+// ── 1. projects.yaml 结构 ────────────────────────────────────────────────
 const doc = parseYaml(readFileSync(join(ROOT, 'projects.yaml'), 'utf8'))
 const settings = doc?.settings ?? {}
 for (const key of ['staleDays', 'zombieDays', 'wipSoftLimit']) {
@@ -24,7 +26,7 @@ for (const key of ['staleDays', 'zombieDays', 'wipSoftLimit']) {
 }
 if (settings.staleDays >= settings.zombieDays) fail('staleDays 必须小于 zombieDays')
 
-const projects = Array.isArray(doc?.projects) ? doc.projects : fail('projects 必须是数组') ?? []
+const projects = Array.isArray(doc?.projects) ? doc.projects : (fail('projects 必须是数组') ?? [])
 const ids = new Set()
 for (const [index, project] of projects.entries()) {
   const where = `projects[${index}] (${project?.id ?? '无 id'})`
@@ -39,12 +41,7 @@ for (const [index, project] of projects.entries()) {
   ids.add(project?.id)
 }
 
-const wip = projects.filter((p) => p.status === 'building' || p.status === 'editing' || p.status === 'collecting').length
-if (wip > settings.wipSoftLimit) {
-  console.log(`⚠ 提醒（不算失败）：${wip} 个在做，超过软上限 ${settings.wipSoftLimit}`)
-}
-
-// 2. 插件契约 + 路由响应
+// ── 2. 插件契约 ──────────────────────────────────────────────────────────
 const loaded = await import(pathToFileURL(join(ROOT, 'lib', 'host', 'index.js')).href)
 if (typeof loaded.apply !== 'function') fail('lib/host/index.js 必须导出 apply 函数')
 if (!Array.isArray(loaded.inject) || !loaded.inject.includes('webServer')) fail("inject 必须包含 'webServer'")
@@ -59,39 +56,98 @@ for (const route of routes) {
   if (!String(route.path).startsWith('/')) fail(`路由 ${route.path} 必须以 / 开头`)
   if (typeof route.handler !== 'function') fail(`路由 ${route.path} 没有 handler`)
 }
+for (const path of ['/project-board', '/project-board/data.json']) {
+  if (!routes.some((route) => route.path === path)) fail(`没有注册 ${path}`)
+}
 
-const probe = routes.find((r) => r.path === '/project-board/data.json')
-if (!probe) {
-  fail('没有注册 /project-board/data.json')
-} else {
+// ── 3. 路由真的能响应（顺带做完整证据折叠，会扫盘几秒） ──────────────────
+async function hit(pathname) {
   let status = 0
   let body = ''
-  await probe.handler(
-    { method: 'GET', url: '/project-board/data.json' },
-    {
-      writeHead: (code) => { status = code },
-      end: (chunk) => { body = String(chunk ?? '') },
-    },
+  const route = routes.find((candidate) => candidate.path === pathname)
+  await route.handler(
+    { method: 'GET', url: pathname },
+    { writeHead: (code) => { status = code }, end: (chunk) => { body = String(chunk ?? '') } },
   )
-  if (status !== 200) fail(`路由返回 ${status}，期望 200`)
-  try {
-    const parsed = JSON.parse(body)
-    if (parsed.ok !== true) fail('路由返回 JSON 的 ok 不为 true')
-    if (parsed.projectCount !== projects.length) {
-      fail(`路由报告 ${parsed.projectCount} 个项目，YAML 里是 ${projects.length}`)
-    }
-    console.log(`✓ 路由 200，项目数 ${parsed.projectCount}，来源 ${parsed.source}`)
-  } catch {
-    fail(`路由返回的不是合法 JSON：${body.slice(0, 200)}`)
-  }
+  return { status, body }
 }
+
+const json = await hit('/project-board/data.json')
+if (json.status !== 200) fail(`data.json 返回 ${json.status}，期望 200`)
+
+let data = null
+try {
+  data = JSON.parse(json.body)
+  if (data.ok !== true) fail('data.json 的 ok 不为 true')
+} catch {
+  fail(`data.json 不是合法 JSON：${json.body.slice(0, 200)}`)
+}
+
+if (data) {
+  const folded = [...data.active, ...data.shelved, ...data.done]
+  if (folded.length !== projects.length) {
+    fail(`折叠后 ${folded.length} 个项目，YAML 里是 ${projects.length}`)
+  }
+  if (data.active.some((project) => project.status === 'shelved')) {
+    fail('已认账的项目不该出现在进行中列表里')
+  }
+  for (const project of folded) {
+    const machine = project.machine ?? {}
+    if (machine.days !== null && (typeof machine.days !== 'number' || machine.days < 0)) {
+      fail(`${project.id} 的天数非法：${machine.days}`)
+    }
+    if (machine.days !== null) {
+      const expected =
+        machine.days >= settings.zombieDays ? 'zombie' : machine.days >= settings.staleDays ? 'stale' : 'fresh'
+      if (machine.level !== expected) fail(`${project.id} level=${machine.level}，按天数应为 ${expected}`)
+    }
+    if (DONE.has(project.status) && data.active.includes(project)) fail(`${project.id} 已交付却出现在进行中`)
+  }
+  const wip = folded.filter((project) => WIP.has(project.status)).length
+  if (data.summary.wip !== wip) fail(`summary.wip=${data.summary.wip}，实际 ${wip}`)
+  if (data.summary.doneCount !== folded.filter((p) => DONE.has(p.status)).length) fail('summary.doneCount 不对')
+  const sorted = data.active.every((project, index, all) => {
+    if (index === 0) return true
+    const prev = all[index - 1].machine.days ?? Infinity
+    const cur = project.machine.days ?? Infinity
+    return prev >= cur
+  })
+  if (!sorted) fail('进行中的项目没有按「最久没动」排序')
+
+  // 首屏预览：这就是你打开页面会看到的东西
+  const preview = (title, rows) => {
+    if (rows.length === 0) return
+    console.log(`\n▸ ${title}`)
+    console.log('─'.repeat(58))
+    for (const project of rows) {
+      const days = project.machine.days === null ? '无记录' : project.machine.days === 0 ? '今天' : `${project.machine.days} 天`
+      console.log(
+        `${project.id.padEnd(20)} ${String(project.status).padEnd(11)} ${days.padStart(9)}   ${project.kind}`,
+      )
+    }
+  }
+  preview('进行中（按最久没动排序）', data.active)
+  preview('已认账不做', data.shelved)
+  preview('已完成', data.done)
+  console.log('─'.repeat(58))
+  const { summary } = data
+  console.log(
+    `停止推进 ${summary.zombie} · 变慢 ${summary.stale} · 在动 ${summary.fresh} · 在做 ${summary.wip} · 认账 ${summary.shelvedCount} · 完成 ${summary.doneCount}`,
+  )
+  if (summary.wipOver) console.log(`⚠ 在做 ${summary.wip} 个，超过软上限 ${settings.wipSoftLimit}`)
+}
+
+const html = await hit('/project-board')
+if (html.status !== 200) fail(`/project-board 返回 ${html.status}，期望 200`)
+if (!html.body.includes('<title>项目进度</title>')) fail('/project-board 没有返回面板页面')
+if (html.body.includes('undefined')) fail('/project-board 页面里出现了 undefined')
 
 if (typeof dispose === 'function') dispose()
 
-// 3. 收尾
+// ── 4. 收尾 ──────────────────────────────────────────────────────────────
 if (problems.length > 0) {
   console.error('\n✗ 自检失败：')
   for (const message of problems) console.error('  - ' + message)
   process.exit(1)
 }
-console.log(`✓ 自检通过：${projects.length} 个项目，${routes.length} 条路由`)
+console.log(`\n✓ 自检通过：${projects.length} 个项目，${routes.length} 条路由`)
