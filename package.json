@@ -1,13 +1,14 @@
 {
   "name": "@local/dsh-project-board",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "DSH 项目进度面板（只读）：把 projects.yaml 与本地证据——会话记录、git 提交、文件改动时间——折叠成一张按『最久没动』排序的红黄绿清单。",
+  "description": "DSH 项目进度看板：原生侧边栏面板，五列按状态分，拖动改状态、单击进项目继续开发。",
   "license": "MIT",
   "main": "lib/host/index.js",
   "exports": {
     ".": "./lib/host/index.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
   "dsh": {
@@ -16,6 +17,13 @@
     },
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
     }
   },
   "dependencies": {
