@@ -1,0 +1,27 @@
+{
+  "name": "@local/dsh-project-board",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH 项目进度面板（只读）：把 projects.yaml 与本地证据——会话记录、git 提交、文件改动时间——折叠成一张按『最久没动』排序的红黄绿清单。",
+  "license": "MIT",
+  "main": "lib/host/index.js",
+  "exports": {
+    ".": "./lib/host/index.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.2.1-rc.2"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
+  "scripts": {
+    "check": "node scripts/check.mjs"
+  }
+}
